@@ -111,5 +111,51 @@ async def _airlock(ctx: SlashContext):
                 await ctx.send(f"No action taken for {member.name}#{member.discriminator}.")
 
 
+@slash.slash(
+    name="airlock_bulk",
+    description="Check and ban sus users in bulk",
+    guild_ids=guild_ids,
+)
+async def airlock_bulk(ctx):
+    current_time = datetime.utcnow()
+    sus_members = [
+        member
+        for member in ctx.guild.members
+        if await is_sus(member, current_time)
+    ]
+
+    for i in range(0, len(sus_members), 10):
+        embed = discord.Embed(title="Sus Users", description=f"Batch {i // 10 + 1}", color=0xFF5733)
+
+        for index, member in enumerate(sus_members[i:i + 10], start=i + 1):
+            embed.add_field(name=f"{index}. {member.name}", value=f"ID: {member.id}", inline=False)
+
+        message = await ctx.send(embed=embed)
+
+        for emoji in (ban_emoji, no_action_emoji):
+            await message.add_reaction(emoji)
+
+        def check(_reaction, user):
+            return (
+                    user == ctx.author
+                    and _reaction.message.id == message.id
+                    and str(_reaction.emoji) in (ban_emoji, no_action_emoji)
+            )
+
+        try:
+            reaction, _ = await bot.wait_for("reaction_add", check=check, timeout=60)
+        except asyncio.TimeoutError:
+            await ctx.send("Timeout. No action taken.")
+            return
+
+        if str(reaction.emoji) == ban_emoji:
+            for member in sus_members[i:i + 10]:
+                try:
+                    await ctx.guild.ban(member, reason="Sus user banned by Airlock command.")
+                except discord.errors.Forbidden:
+                    await ctx.send(f"Failed to ban {member.name}. Check the bot's permissions.")
+        else:
+            await ctx.send("No action taken.")
+
 
 bot.run(bot_token)
