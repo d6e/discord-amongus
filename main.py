@@ -46,6 +46,7 @@ async def sus_users(ctx: SlashContext):
         if await is_sus(member, current_time):
             member_info = {
                 "name": f'{member.name}#{member.discriminator}',
+                "date_created": member.created_at.isoformat(),
                 "date_joined": member.joined_at.isoformat(),
                 "has_avatar": bool(member.avatar)
             }
