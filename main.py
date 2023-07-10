@@ -131,13 +131,13 @@ async def _airlock(ctx: SlashContext):
                               description="Is this user sus? React with the appropriate emoji.",
                               color=discord.Color.blue())
         embed.set_thumbnail(url=member.avatar_url or member.default_avatar_url)
-        embed.add_field(name="id", value=member.id, inline=True)
-        embed.add_field(name="display_name", value=member.display_name, inline=True)
+        embed.add_field(name="id", value=member.id, inline=False)
+        embed.add_field(name="display_name", value=member.display_name, inline=False)
         embed.add_field(name="Joined Server", value=member.joined_at.strftime("%Y-%m-%d"), inline=False)
-        embed.add_field(name="Account Creation", value=member.created_at.strftime("%Y-%m-%d"), inline=True)
+        embed.add_field(name="Account Creation", value=member.created_at.strftime("%Y-%m-%d"), inline=False)
         embed.set_footer(text=f"User {index} of {total_sus_members}")
 
-        message_data = await ctx.send(embed=embed)
+        message_data = await ctx.send(member.mention, embed=embed)
         await message_data.add_reaction(ban_emoji)
         await message_data.add_reaction(kick_emoji)
         await message_data.add_reaction(no_action_emoji)
