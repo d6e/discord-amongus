@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime
 import json
 import os
+import re
 
 import discord
 from discord.ext import commands
@@ -24,13 +25,38 @@ ban_emoji = "🔨"
 kick_emoji = "👢"
 no_action_emoji = "🚫"
 
+banned_avatars=[
+    "https://cdn.discordapp.com/avatars/1127546621392064572/bf9c78940878fa7b98938ccfd0a52b07.png?size=1024",
+    "https://cdn.discordapp.com/avatars/1127413539766812704/0e63aacbb6632e07b5cfdc2051d9ee96.png?size=1024",
+    "https://cdn.discordapp.com/avatars/1127410432223756389/5228efe31c748da22b4e7c2672f3f150.png?size=1024",
+    "https://cdn.discordapp.com/avatars/1127546209310089316/46c5336b0d912cf3ffe2e82b2d0bdcb0.png?size=1024",
+    "https://cdn.discordapp.com/avatars/1127414479139909726/79d5d872b3db33433ee3ed584b8e7209.png?size=1024"
+]
+
 
 @bot.event
 async def on_ready():
     print(f'{bot.user.name} has connected to Discord!')
 
 
+def is_13_char_mixed_lower_alphanumeric(username: str):
+    # Check if the length is exactly 13
+    if len(username) != 13:
+        return False
+
+    # Check if username has alternating letters and numbers before the '#'
+    if not re.fullmatch('(([a-zA-Z][0-9])+[a-zA-Z])', username):
+        return False
+    return True
+
+
+async def is_avatar_banned(member: discord.Member, banned_avatars: list):
+    avatar_url = str(member.avatar_url)
+    return avatar_url in banned_avatars
+
 async def is_sus(member, current_time):
+    if is_13_char_mixed_lower_alphanumeric(member.name): return True
+    if await is_avatar_banned(member, banned_avatars=banned_avatars): return True
     new_account = (current_time - member.created_at).days < 60
     recently_joined = (current_time - member.joined_at).days < 30
     no_avatar = not member.avatar
@@ -159,4 +185,5 @@ async def airlock_bulk(ctx):
             await ctx.send("No action taken.")
 
 
-bot.run(bot_token)
+if __name__ == "__main__":
+    bot.run(bot_token)
