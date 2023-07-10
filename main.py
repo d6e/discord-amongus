@@ -150,6 +150,7 @@ async def _airlock(ctx: SlashContext):
             reaction, user = await bot.wait_for("reaction_add", timeout=60.0, check=check)
         except asyncio.TimeoutError:
             await ctx.send(f"Timeout. No action taken for {member.name}#{member.discriminator}.")
+            return
         else:
             if str(reaction.emoji) == ban_emoji:
                 try:
