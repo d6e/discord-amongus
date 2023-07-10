@@ -96,6 +96,8 @@ async def sus_users(ctx: SlashContext):
         if await is_sus(member, current_time, duplicate_dates):
             member_info = {
                 "name": f'{member.name}#{member.discriminator}',
+                "id": member.id,
+                "display_name": member.display_name,
                 "date_created": member.created_at.isoformat(),
                 "date_joined": member.joined_at.isoformat(),
                 "has_avatar": bool(member.avatar)
@@ -129,8 +131,10 @@ async def _airlock(ctx: SlashContext):
                               description="Is this user sus? React with the appropriate emoji.",
                               color=discord.Color.blue())
         embed.set_thumbnail(url=member.avatar_url or member.default_avatar_url)
-        embed.add_field(name="Joined Server", value=member.joined_at.strftime("%Y-%m-%d"), inline=True)
-        embed.add_field(name="Joined Discord", value=member.created_at.strftime("%Y-%m-%d"), inline=True)
+        embed.add_field(name="id", value=member.id, inline=True)
+        embed.add_field(name="display_name", value=member.display_name, inline=True)
+        embed.add_field(name="Joined Server", value=member.joined_at.strftime("%Y-%m-%d"), inline=False)
+        embed.add_field(name="Account Creation", value=member.created_at.strftime("%Y-%m-%d"), inline=True)
         embed.set_footer(text=f"User {index} of {total_sus_members}")
 
         message_data = await ctx.send(embed=embed)
