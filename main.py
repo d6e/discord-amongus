@@ -61,16 +61,32 @@ def has_duplicate_date(member, duplicate_dates) -> bool:
     return date in duplicate_dates
 
 
-async def is_sus(member, duplicate_dates) -> bool:
+def is_new_account(member, days: int = 7) -> bool:
     current_time = datetime.utcnow()
-    if has_duplicate_date(member, duplicate_dates): return True
-    if is_13_char_mixed_lower_alphanumeric(member.name): return True
-    if await is_avatar_banned(member, banned_avatars=banned_avatars): return True
-    new_account = (current_time - member.created_at).days < 60
-    recently_joined = (current_time - member.joined_at).days < 30
-    no_avatar = not member.avatar
+    return (current_time - member.created_at).days < days
+
+
+def is_recent_join(member, days: int = 30) -> bool:
+    current_time = datetime.utcnow()
+    return (current_time - member.joined_at).days < days
+
+
+def has_no_avatar(member) -> bool:
+    return not member.avatar
+
+
+async def is_sus(member, duplicate_dates) -> bool:
+    if has_duplicate_date(member, duplicate_dates):
+        return True
+    if is_13_char_mixed_lower_alphanumeric(member.name):
+        return True
+    if await is_avatar_banned(member, banned_avatars=banned_avatars):
+        return True
     eight_char_name = len(member.name) == 8
-    return new_account and recently_joined and no_avatar and eight_char_name
+    return (is_new_account(member, days=60) and
+            is_recent_join(member) and
+            has_no_avatar(member) and
+            eight_char_name)
 
 
 def created_joined_str(member) -> str:
