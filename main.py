@@ -59,7 +59,8 @@ def has_duplicate_date(member, duplicate_dates) -> bool:
     date = created_joined_str(member)
     return date in duplicate_dates
 
-async def is_sus(member, current_time, duplicate_dates) -> bool:
+async def is_sus(member, duplicate_dates) -> bool:
+    current_time = datetime.utcnow()
     if has_duplicate_date(member, duplicate_dates): return True
     if is_13_char_mixed_lower_alphanumeric(member.name): return True
     if await is_avatar_banned(member, banned_avatars=banned_avatars): return True
@@ -89,11 +90,10 @@ def find_duplicate_dates(members):
 
 @slash.slash(name="sus", description="List sus users", guild_ids=guild_ids)
 async def sus_users(ctx: SlashContext):
-    current_time = datetime.utcnow()
     members_data = []
     duplicate_dates = find_duplicate_dates(ctx.guild.members)
     for member in ctx.guild.members:
-        if await is_sus(member, current_time, duplicate_dates):
+        if await is_sus(member, duplicate_dates):
             member_info = {
                 "name": f'{member.name}#{member.discriminator}',
                 "id": member.id,
@@ -117,9 +117,8 @@ async def sus_users(ctx: SlashContext):
 
 @slash.slash(name="airlock", description="Ban or kick sus users with confirmation", guild_ids=guild_ids)
 async def airlock(ctx: SlashContext):
-    current_time = datetime.utcnow()
     duplicate_dates = find_duplicate_dates(ctx.guild.members)
-    sus_members = [member for member in ctx.guild.members if await is_sus(member, current_time, duplicate_dates)]
+    sus_members = [member for member in ctx.guild.members if await is_sus(member, duplicate_dates)]
 
     if not sus_members:
         await ctx.send('No sus users found matching the criteria.')
@@ -174,12 +173,11 @@ async def airlock(ctx: SlashContext):
     guild_ids=guild_ids,
 )
 async def airlock_bulk(ctx):
-    current_time = datetime.utcnow()
     duplicate_dates = find_duplicate_dates(ctx.guild.members)
     sus_members = [
         member
         for member in ctx.guild.members
-        if await is_sus(member, current_time, duplicate_dates)
+        if await is_sus(member, duplicate_dates)
     ]
 
     for i in range(0, len(sus_members), 10):
