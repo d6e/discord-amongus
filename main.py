@@ -185,10 +185,12 @@ async def airlock_bulk(ctx):
     for i in range(0, len(sus_members), 10):
         embed = discord.Embed(title="Sus Users", description=f"Batch {i // 10 + 1}", color=0xFF5733)
 
+        batch_members = []
         for index, member in enumerate(sus_members[i:i + 10], start=i + 1):
+            batch_members.append(member)
             embed.add_field(name=f"{index}. {member.name}", value=f"ID: {member.id}", inline=False)
-
-        message = await ctx.send(embed=embed)
+        mentions = [m.mention for m in batch_members]
+        message = await ctx.send(str(mentions), embed=embed)
 
         for emoji in (ban_emoji, no_action_emoji):
             await message.add_reaction(emoji)
