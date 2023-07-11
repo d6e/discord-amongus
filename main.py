@@ -26,7 +26,7 @@ ban_emoji = "🔨"
 kick_emoji = "👢"
 no_action_emoji = "🚫"
 
-banned_avatars=[
+banned_avatars = [
     "https://cdn.discordapp.com/avatars/1127546621392064572/bf9c78940878fa7b98938ccfd0a52b07.png?size=1024",
     "https://cdn.discordapp.com/avatars/1127413539766812704/0e63aacbb6632e07b5cfdc2051d9ee96.png?size=1024",
     "https://cdn.discordapp.com/avatars/1127410432223756389/5228efe31c748da22b4e7c2672f3f150.png?size=1024",
@@ -55,9 +55,11 @@ async def is_avatar_banned(member: discord.Member, banned_avatars: list) -> bool
     avatar_url = str(member.avatar_url)
     return avatar_url in banned_avatars
 
+
 def has_duplicate_date(member, duplicate_dates) -> bool:
     date = created_joined_str(member)
     return date in duplicate_dates
+
 
 async def is_sus(member, duplicate_dates) -> bool:
     current_time = datetime.utcnow()
@@ -70,6 +72,7 @@ async def is_sus(member, duplicate_dates) -> bool:
     eight_char_name = len(member.name) == 8
     return new_account and recently_joined and no_avatar and eight_char_name
 
+
 def created_joined_str(member) -> str:
     return f'{member.created_at.date()}_{member.joined_at.date()}'
 
@@ -78,7 +81,7 @@ def find_duplicate_dates(members):
     date_counts = defaultdict(int)
     for member in members:
         if str(member.created_at.date()) == str(member.joined_at.date()):
-            continue # skip same day create and joins
+            continue  # skip same day create and joins
         date = created_joined_str(member)
         date_counts[date] += 1
 
