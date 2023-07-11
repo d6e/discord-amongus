@@ -116,7 +116,7 @@ async def sus_users(ctx: SlashContext):
 
 
 @slash.slash(name="airlock", description="Ban or kick sus users with confirmation", guild_ids=guild_ids)
-async def _airlock(ctx: SlashContext):
+async def airlock(ctx: SlashContext):
     current_time = datetime.utcnow()
     duplicate_dates = find_duplicate_dates(ctx.guild.members)
     sus_members = [member for member in ctx.guild.members if await is_sus(member, current_time, duplicate_dates)]
