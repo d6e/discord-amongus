@@ -90,7 +90,7 @@ async def on_member_join(new_user: discord.Member):
     if has_duplicate_date(new_user, duplicate_dates):
         group_size = duplicate_dates[created_joined_str(new_user)]
         await notify_channel.send(f"This user={new_user.mention} shares the same join-create "
-                                  f"date with these '{group_size}' users:")
+                                  f"date with these `{group_size}` users:")
         sus_grp = find_sus_group(new_user)
         message = [sus.mention for sus in sus_grp]
         await notify_channel.send(','.join(message))
@@ -123,7 +123,7 @@ async def sus_group(ctx: SlashContext, user: discord.Member):
         await ctx.channel.send(f"No users were found with similar join-create dates to user={user.mention}.")
         return
     group_size = duplicate_dates[created_joined_str(user)]
-    await ctx.channel.send(f"This user={user.mention} shares the same join-create date with these '{group_size}' "
+    await ctx.channel.send(f"This user={user.mention} shares the same join-create date with these `{group_size}` "
                            f"users:")
     sus_grp = find_sus_group(user)
     message = [sus.mention for sus in sus_grp]
@@ -170,7 +170,7 @@ async def sus_check(member: discord.Member, duplicate_dates) -> Optional[SusUser
     if has_duplicate_date(member, duplicate_dates):
         # TODO: when this occurs we should post *all* matching users with similar dates and maybe store those dates
         reasons.append(f"Shares an account creation *and* join date "
-                       f"with '{duplicate_dates[created_joined_str(member)]}' other users")
+                       f"with `{duplicate_dates[created_joined_str(member)]}` other users")
     if is_13_char_mixed_lower_alphanumeric(member.name):
         reasons.append("Has a 13 char name with mixed lower alphanumeric chars")
     if await is_avatar_banned(member):
@@ -225,7 +225,7 @@ async def sus_users(ctx: SlashContext):
             json.dump(members_data, f, ensure_ascii=False, indent=4)
 
         await ctx.send(
-            f'{len(members_data)} users found matching the criteria. The list has been saved to "users.json".',
+            f'`{len(members_data)}` users found matching the criteria. The list has been saved to "users.json".',
             hidden=True)
 
 
@@ -240,9 +240,9 @@ async def find_sus(members) -> List[SusUser]:
     return sus_members
 
 
-def make_sus_user_embed(sus: SusUser):
+def make_sus_user_embed(sus: SusUser, description=""):
     embed = discord.Embed(title=f"{sus.username}",
-                          description="Is this user sus? React with the appropriate emoji.",
+                          description=description,
                           color=discord.Color.blue())
     embed.set_thumbnail(url=sus.avatar_url)
     embed.add_field(name="id", value=str(sus.user_id), inline=False)
@@ -263,7 +263,7 @@ async def airlock(ctx: SlashContext):
 
     total_sus_members = len(sus_members)
     for index, sus in enumerate(sus_members, start=1):
-        embed = make_sus_user_embed(sus)
+        embed = make_sus_user_embed(sus, "Is this user sus? React with the appropriate emoji.")
         embed.set_footer(text=f"User {index} of {total_sus_members}")
 
         message_data = await ctx.send(sus.mention, embed=embed)
