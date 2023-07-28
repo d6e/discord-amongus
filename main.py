@@ -42,15 +42,15 @@ class SusUser:
     user_id: int
     username: str
     display_name: str
-    date_created: datetime.datetime
-    date_joined: datetime.datetime
+    date_created: datetime
+    date_joined: datetime
     has_avatar: bool
     avatar_url: str
     mention: str
     reasons: List[str]
 
 
-def create_sus_user(member) -> SusUser:
+def create_sus_user(member, reasons: list) -> SusUser:
     return SusUser(
         user_id=member.id,
         username=f'{member.name}#{member.discriminator}',
@@ -58,9 +58,9 @@ def create_sus_user(member) -> SusUser:
         date_created=member.created_at,
         date_joined=member.joined_at,
         has_avatar=bool(member.avatar),
-        avatar_url=str(member.avatar_url),
+        avatar_url=str(member.avatar_url or member.default_avatar_url),
         mention=member.mention,
-        reason=[]
+        reasons=reasons
     )
 
 
@@ -75,12 +75,12 @@ def is_13_char_mixed_lower_alphanumeric(username: str) -> bool:
         return False
 
     # Check if username has alternating letters and numbers before the '#'
-    if not re.fullmatch('(([a-zA-Z][0-9])+[a-zA-Z])', username):
+    if not re.fullmatch(r'(([a-zA-Z][0-9])+[a-zA-Z])', username):
         return False
     return True
 
 
-async def is_avatar_banned(member: discord.Member, banned_avatars: list) -> bool:
+async def is_avatar_banned(member: discord.Member) -> bool:
     avatar_url = str(member.avatar_url)
     return avatar_url in banned_avatars
 
@@ -112,15 +112,13 @@ async def sus_check(member, duplicate_dates) -> Optional[SusUser]:
                        f"with '{duplicate_dates[created_joined_str(member)]}' other users")
     if is_13_char_mixed_lower_alphanumeric(member.name):
         reasons.append("Has a 13 char name with mixed lower alphanumeric chars")
-    if await is_avatar_banned(member, banned_avatars=banned_avatars):
+    if await is_avatar_banned(member):
         reasons.append("Has a known banned avatar")
     # TODO: we should also have a case where we check if duplicate (non-default) avatars
     if is_new_account(member, days=7) and has_no_avatar(member):
         reasons.append("Account is less than 7 days old and has no avatar")
     if len(reasons) > 0:
-        user = create_sus_user(member)
-        user.reasons = reasons
-        return user
+        return create_sus_user(member, reasons)
     else:
         return None
 
@@ -170,28 +168,39 @@ async def sus_users(ctx: SlashContext):
             hidden=True)
 
 
+async def find_sus(members) -> List[SusUser]:
+    duplicate_dates = find_duplicate_dates(members)
+    sus_members = []
+    for member in members:
+        sus_member = await sus_check(member, duplicate_dates)
+        if sus_member is None:
+            continue
+        sus_members.append(sus_member)
+    return sus_members
+
+
 @slash.slash(name="airlock", description="Ban or kick sus users with confirmation", guild_ids=guild_ids)
 async def airlock(ctx: SlashContext):
-    duplicate_dates = find_duplicate_dates(ctx.guild.members)
-    sus_members = [member for member in ctx.guild.members if await sus_check(member, duplicate_dates)]
+    sus_members: List[SusUser] = await find_sus(ctx.guild.members)
 
     if not sus_members:
         await ctx.send('No sus users found matching the criteria.')
         return
 
     total_sus_members = len(sus_members)
-    for index, member in enumerate(sus_members, start=1):
-        embed = discord.Embed(title=f"{member.name}#{member.discriminator}",
+    for index, sus in enumerate(sus_members, start=1):
+        embed = discord.Embed(title=f"{sus.username}",
                               description="Is this user sus? React with the appropriate emoji.",
                               color=discord.Color.blue())
-        embed.set_thumbnail(url=member.avatar_url or member.default_avatar_url)
-        embed.add_field(name="id", value=member.id, inline=False)
-        embed.add_field(name="display_name", value=member.display_name, inline=False)
-        embed.add_field(name="Joined Server", value=member.joined_at.strftime("%Y-%m-%d"), inline=False)
-        embed.add_field(name="Account Creation", value=member.created_at.strftime("%Y-%m-%d"), inline=False)
+        embed.set_thumbnail(url=sus.avatar_url)
+        embed.add_field(name="id", value=str(sus.user_id), inline=False)
+        embed.add_field(name="display_name", value=sus.display_name, inline=False)
+        embed.add_field(name="Joined Server", value=sus.date_joined.strftime("%Y-%m-%d"), inline=False)
+        embed.add_field(name="Account Creation", value=sus.date_created.strftime("%Y-%m-%d"), inline=False)
+        embed.add_field(name="Reasons", value=f"[{','.join(sus.reasons)}]", inline=False)
         embed.set_footer(text=f"User {index} of {total_sus_members}")
 
-        message_data = await ctx.send(member.mention, embed=embed)
+        message_data = await ctx.send(sus.mention, embed=embed)
         await message_data.add_reaction(ban_emoji)
         await message_data.add_reaction(kick_emoji)
         await message_data.add_reaction(no_action_emoji)
@@ -203,23 +212,23 @@ async def airlock(ctx: SlashContext):
         try:
             reaction, user = await bot.wait_for("reaction_add", timeout=60.0, check=check)
         except asyncio.TimeoutError:
-            await ctx.send(f"Timeout. No action taken for {member.name}#{member.discriminator}.")
+            await ctx.send(f"Timeout. No action taken for {sus.username}.")
             return
         else:
             if str(reaction.emoji) == ban_emoji:
                 try:
-                    await ctx.guild.ban(member)
-                    await ctx.send(f"{member.name}#{member.discriminator} has been banned.")
+                    await ctx.guild.ban(sus)
+                    await ctx.send(f"{sus.username} has been banned.")
                 except discord.errors.Forbidden:
                     await ctx.send("Failed to ban the user. Check the bot's permissions.")
             elif str(reaction.emoji) == kick_emoji:
                 try:
-                    await ctx.guild.kick(member)
-                    await ctx.send(f"{member.name}#{member.discriminator} has been kicked.")
+                    await ctx.guild.kick(sus)
+                    await ctx.send(f"{sus.username} has been kicked.")
                 except discord.errors.Forbidden:
                     await ctx.send("Failed to kick the user. Check the bot's permissions.")
             elif str(reaction.emoji) == no_action_emoji:
-                await ctx.send(f"No action taken for {member.name}#{member.discriminator}.")
+                await ctx.send(f"No action taken for {sus.username}.")
 
 
 @slash.slash(
@@ -228,20 +237,16 @@ async def airlock(ctx: SlashContext):
     guild_ids=guild_ids,
 )
 async def airlock_bulk(ctx):
-    duplicate_dates = find_duplicate_dates(ctx.guild.members)
-    sus_members = [
-        member
-        for member in ctx.guild.members
-        if await sus_check(member, duplicate_dates)
-    ]
+    sus_members = await find_sus(ctx.guild.members)
 
+    # Create bulk list
     for i in range(0, len(sus_members), 10):
         embed = discord.Embed(title="Sus Users", description=f"Batch {i // 10 + 1}", color=0xFF5733)
 
         batch_members = []
-        for index, member in enumerate(sus_members[i:i + 10], start=i + 1):
-            batch_members.append(member)
-            embed.add_field(name=f"{index}. {member.name}", value=f"ID: {member.id}", inline=False)
+        for index, sus in enumerate(sus_members[i:i + 10], start=i + 1):
+            batch_members.append(sus)
+            embed.add_field(name=f"{index}. {sus.username}", value=f"[{','.join(sus.reasons)}]", inline=False)
         mentions = [m.mention for m in batch_members]
         message = await ctx.send(str(mentions), embed=embed)
 
@@ -262,11 +267,11 @@ async def airlock_bulk(ctx):
             return
 
         if str(reaction.emoji) == ban_emoji:
-            for member in sus_members[i:i + 10]:
+            for sus in sus_members[i:i + 10]:
                 try:
-                    await ctx.guild.ban(member, reason="Sus user banned by Airlock command.")
+                    await ctx.guild.ban(sus, reason="Sus user banned by Airlock command.")
                 except discord.errors.Forbidden:
-                    await ctx.send(f"Failed to ban {member.name}. Check the bot's permissions.")
+                    await ctx.send(f"Failed to ban {sus.username}. Check the bot's permissions.")
         else:
             await ctx.send("No action taken.")
 
