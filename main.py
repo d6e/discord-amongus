@@ -24,6 +24,11 @@ bot_token = os.environ['DISCORD_BOT_TOKEN']
 guild_id = os.getenv("DISCORD_GUILD_ID", None)
 guild_ids = [int(guild_id)] if guild_id is not None else None
 
+notify_channel_id = os.getenv("DISCORD_NOTIFY_CHANNEL", None)
+notify_channel = bot.get_channel(int(notify_channel_id)) if notify_channel_id is not None else None
+
+mod_role_id = os.getenv("DISCORD_MOD_ROLE", None)
+
 ban_emoji = "🔨"
 kick_emoji = "👢"
 no_action_emoji = "🚫"
@@ -67,6 +72,19 @@ def create_sus_user(member, reasons: list) -> SusUser:
 @bot.event
 async def on_ready():
     print(f'{bot.user.name} has connected to Discord!')
+
+
+@bot.event
+async def on_member_join(member):
+    duplicate_dates = find_duplicate_dates(member.guild.members)
+    sus = await sus_check(member, duplicate_dates)
+    if sus is None:
+        return
+    embed = make_sus_user_embed(sus)
+    if notify_channel is None or mod_role_id is None:
+        print(f"Cannot notify of new user join because unspecified ids: notify_channel={notify_channel} mod_role_id={mod_role_id}")
+        return
+    await notify_channel.send(f'New sus user detected! {sus.mention} <@&{mod_role_id}>', embed=embed)
 
 
 def is_13_char_mixed_lower_alphanumeric(username: str) -> bool:
@@ -179,6 +197,19 @@ async def find_sus(members) -> List[SusUser]:
     return sus_members
 
 
+def make_sus_user_embed(sus: SusUser):
+    embed = discord.Embed(title=f"{sus.username}",
+                          description="Is this user sus? React with the appropriate emoji.",
+                          color=discord.Color.blue())
+    embed.set_thumbnail(url=sus.avatar_url)
+    embed.add_field(name="id", value=str(sus.user_id), inline=False)
+    embed.add_field(name="display_name", value=sus.display_name, inline=False)
+    embed.add_field(name="Joined Server", value=sus.date_joined.strftime("%Y-%m-%d"), inline=False)
+    embed.add_field(name="Account Creation", value=sus.date_created.strftime("%Y-%m-%d"), inline=False)
+    embed.add_field(name="Reasons", value=f"[{','.join(sus.reasons)}]", inline=False)
+    return embed
+
+
 @slash.slash(name="airlock", description="Ban or kick sus users with confirmation", guild_ids=guild_ids)
 async def airlock(ctx: SlashContext):
     sus_members: List[SusUser] = await find_sus(ctx.guild.members)
@@ -189,15 +220,7 @@ async def airlock(ctx: SlashContext):
 
     total_sus_members = len(sus_members)
     for index, sus in enumerate(sus_members, start=1):
-        embed = discord.Embed(title=f"{sus.username}",
-                              description="Is this user sus? React with the appropriate emoji.",
-                              color=discord.Color.blue())
-        embed.set_thumbnail(url=sus.avatar_url)
-        embed.add_field(name="id", value=str(sus.user_id), inline=False)
-        embed.add_field(name="display_name", value=sus.display_name, inline=False)
-        embed.add_field(name="Joined Server", value=sus.date_joined.strftime("%Y-%m-%d"), inline=False)
-        embed.add_field(name="Account Creation", value=sus.date_created.strftime("%Y-%m-%d"), inline=False)
-        embed.add_field(name="Reasons", value=f"[{','.join(sus.reasons)}]", inline=False)
+        embed = make_sus_user_embed(sus)
         embed.set_footer(text=f"User {index} of {total_sus_members}")
 
         message_data = await ctx.send(sus.mention, embed=embed)
