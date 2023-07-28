@@ -9,6 +9,7 @@ from typing import List, Optional
 import discord
 from discord.ext import commands
 from discord_slash import SlashCommand, SlashContext
+from discord_slash.utils.manage_commands import create_option
 from dotenv import load_dotenv
 from dataclasses import dataclass
 
@@ -24,10 +25,9 @@ bot_token = os.environ['DISCORD_BOT_TOKEN']
 guild_id = os.getenv("DISCORD_GUILD_ID", None)
 guild_ids = [int(guild_id)] if guild_id is not None else None
 
-notify_channel_id = os.getenv("DISCORD_NOTIFY_CHANNEL", None)
-notify_channel = bot.get_channel(int(notify_channel_id)) if notify_channel_id is not None else None
+notify_channel_id = os.environ["DISCORD_NOTIFY_CHANNEL"]
 
-mod_role_id = os.getenv("DISCORD_MOD_ROLE", None)
+mod_role_id = os.environ["DISCORD_MOD_ROLE"]
 
 ban_emoji = "🔨"
 kick_emoji = "👢"
@@ -55,7 +55,7 @@ class SusUser:
     reasons: List[str]
 
 
-def create_sus_user(member, reasons: list) -> SusUser:
+def create_sus_user(member: discord.Member, reasons: list) -> SusUser:
     return SusUser(
         user_id=member.id,
         username=f'{member.name}#{member.discriminator}',
@@ -75,16 +75,59 @@ async def on_ready():
 
 
 @bot.event
-async def on_member_join(member):
-    duplicate_dates = find_duplicate_dates(member.guild.members)
-    sus = await sus_check(member, duplicate_dates)
+async def on_member_join(new_user: discord.Member):
+    notify_channel = bot.get_channel(int(notify_channel_id))
+    duplicate_dates = find_duplicate_dates(new_user.guild.members)
+    sus = await sus_check(new_user, duplicate_dates)
     if sus is None:
         return
     embed = make_sus_user_embed(sus)
     if notify_channel is None or mod_role_id is None:
-        print(f"Cannot notify of new user join because unspecified ids: notify_channel={notify_channel} mod_role_id={mod_role_id}")
+        print(f"Cannot notify of new user join because unspecified ids: DISCORD_NOTIFY_CHANNEL={notify_channel} "
+              f"DISCORD_MOD_ROLE={mod_role_id}")
         return
     await notify_channel.send(f'New sus user detected! {sus.mention} <@&{mod_role_id}>', embed=embed)
+    if has_duplicate_date(new_user, duplicate_dates):
+        group_size = duplicate_dates[created_joined_str(new_user)]
+        await notify_channel.send(f"This user={new_user.mention} shares the same join-create "
+                                  f"date with these '{group_size}' users:")
+        sus_grp = find_sus_group(new_user)
+        message = [sus.mention for sus in sus_grp]
+        await notify_channel.send(','.join(message))
+
+
+def find_sus_group(user: discord.Member) -> List[SusUser]:
+    sus_grp = []
+    for member in user.guild.members:
+        if created_joined_str(member) != created_joined_str(user):
+            continue
+        sus = create_sus_user(member, [created_joined_str(member)])
+        if sus is None:
+            continue
+        sus_grp.append(sus)
+    return sus_grp
+
+
+@slash.slash(name="sus_group", description="List users joined and created on the same date", guild_ids=guild_ids,
+             options=[
+                 create_option(
+                     name="user",
+                     description="Select a user",
+                     option_type=6,
+                     required=True
+                 )
+             ], )
+async def sus_group(ctx: SlashContext, user: discord.Member):
+    duplicate_dates = find_duplicate_dates(user.guild.members)
+    if not has_duplicate_date(user, duplicate_dates):
+        await ctx.channel.send(f"No users were found with similar join-create dates to user={user.mention}.")
+        return
+    group_size = duplicate_dates[created_joined_str(user)]
+    await ctx.channel.send(f"This user={user.mention} shares the same join-create date with these '{group_size}' "
+                           f"users:")
+    sus_grp = find_sus_group(user)
+    message = [sus.mention for sus in sus_grp]
+    await ctx.channel.send(','.join(message))
 
 
 def is_13_char_mixed_lower_alphanumeric(username: str) -> bool:
@@ -103,26 +146,26 @@ async def is_avatar_banned(member: discord.Member) -> bool:
     return avatar_url in banned_avatars
 
 
-def has_duplicate_date(member, duplicate_dates) -> bool:
+def has_duplicate_date(member: discord.Member, duplicate_dates) -> bool:
     date = created_joined_str(member)
     return date in duplicate_dates
 
 
-def is_new_account(member, days: int = 7) -> bool:
+def is_new_account(member: discord.Member, days: int = 7) -> bool:
     current_time = datetime.utcnow()
     return (current_time - member.created_at).days < days
 
 
-def is_recent_join(member, days: int = 30) -> bool:
+def is_recent_join(member: discord.Member, days: int = 30) -> bool:
     current_time = datetime.utcnow()
     return (current_time - member.joined_at).days < days
 
 
-def has_no_avatar(member) -> bool:
+def has_no_avatar(member: discord.Member) -> bool:
     return not member.avatar
 
 
-async def sus_check(member, duplicate_dates) -> Optional[SusUser]:
+async def sus_check(member: discord.Member, duplicate_dates) -> Optional[SusUser]:
     reasons = []
     if has_duplicate_date(member, duplicate_dates):
         # TODO: when this occurs we should post *all* matching users with similar dates and maybe store those dates
@@ -141,7 +184,7 @@ async def sus_check(member, duplicate_dates) -> Optional[SusUser]:
         return None
 
 
-def created_joined_str(member) -> str:
+def created_joined_str(member: discord.Member) -> str:
     return f'{member.created_at.date()}_{member.joined_at.date()}'
 
 
