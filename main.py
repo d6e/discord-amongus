@@ -4,11 +4,13 @@ import json
 import os
 import re
 from collections import defaultdict
+from typing import List, Optional
 
 import discord
 from discord.ext import commands
 from discord_slash import SlashCommand, SlashContext
 from dotenv import load_dotenv
+from dataclasses import dataclass
 
 load_dotenv()
 
@@ -33,6 +35,33 @@ banned_avatars = [
     "https://cdn.discordapp.com/avatars/1127546209310089316/46c5336b0d912cf3ffe2e82b2d0bdcb0.png?size=1024",
     "https://cdn.discordapp.com/avatars/1127414479139909726/79d5d872b3db33433ee3ed584b8e7209.png?size=1024"
 ]
+
+
+@dataclass
+class SusUser:
+    user_id: int
+    username: str
+    display_name: str
+    date_created: datetime.datetime
+    date_joined: datetime.datetime
+    has_avatar: bool
+    avatar_url: str
+    mention: str
+    reasons: List[str]
+
+
+def create_sus_user(member) -> SusUser:
+    return SusUser(
+        user_id=member.id,
+        username=f'{member.name}#{member.discriminator}',
+        display_name=member.display_name,
+        date_created=member.created_at,
+        date_joined=member.joined_at,
+        has_avatar=bool(member.avatar),
+        avatar_url=str(member.avatar_url),
+        mention=member.mention,
+        reason=[]
+    )
 
 
 @bot.event
@@ -75,18 +104,25 @@ def has_no_avatar(member) -> bool:
     return not member.avatar
 
 
-async def is_sus(member, duplicate_dates) -> bool:
+async def sus_check(member, duplicate_dates) -> Optional[SusUser]:
+    reasons = []
     if has_duplicate_date(member, duplicate_dates):
-        return True
+        # TODO: when this occurs we should post *all* matching users with similar dates and maybe store those dates
+        reasons.append(f"Shares an account creation *and* join date "
+                       f"with '{duplicate_dates[created_joined_str(member)]}' other users")
     if is_13_char_mixed_lower_alphanumeric(member.name):
-        return True
+        reasons.append("Has a 13 char name with mixed lower alphanumeric chars")
     if await is_avatar_banned(member, banned_avatars=banned_avatars):
-        return True
-    eight_char_name = len(member.name) == 8
-    return (is_new_account(member, days=60) and
-            is_recent_join(member) and
-            has_no_avatar(member) and
-            eight_char_name)
+        reasons.append("Has a known banned avatar")
+    # TODO: we should also have a case where we check if duplicate (non-default) avatars
+    if is_new_account(member, days=7) and has_no_avatar(member):
+        reasons.append("Account is less than 7 days old and has no avatar")
+    if len(reasons) > 0:
+        user = create_sus_user(member)
+        user.reasons = reasons
+        return user
+    else:
+        return None
 
 
 def created_joined_str(member) -> str:
@@ -112,7 +148,7 @@ async def sus_users(ctx: SlashContext):
     members_data = []
     duplicate_dates = find_duplicate_dates(ctx.guild.members)
     for member in ctx.guild.members:
-        if await is_sus(member, duplicate_dates):
+        if await sus_check(member, duplicate_dates):
             member_info = {
                 "name": f'{member.name}#{member.discriminator}',
                 "id": member.id,
@@ -137,7 +173,7 @@ async def sus_users(ctx: SlashContext):
 @slash.slash(name="airlock", description="Ban or kick sus users with confirmation", guild_ids=guild_ids)
 async def airlock(ctx: SlashContext):
     duplicate_dates = find_duplicate_dates(ctx.guild.members)
-    sus_members = [member for member in ctx.guild.members if await is_sus(member, duplicate_dates)]
+    sus_members = [member for member in ctx.guild.members if await sus_check(member, duplicate_dates)]
 
     if not sus_members:
         await ctx.send('No sus users found matching the criteria.')
@@ -196,7 +232,7 @@ async def airlock_bulk(ctx):
     sus_members = [
         member
         for member in ctx.guild.members
-        if await is_sus(member, duplicate_dates)
+        if await sus_check(member, duplicate_dates)
     ]
 
     for i in range(0, len(sus_members), 10):
