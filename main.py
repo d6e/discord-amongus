@@ -3,13 +3,13 @@ from datetime import datetime
 import json
 import os
 import re
-from collections import defaultdict
-from typing import List, Optional
+from collections import defaultdict, OrderedDict
+from typing import List, Optional, Dict
 
 import discord
 from discord.ext import commands
 from discord_slash import SlashCommand, SlashContext
-from discord_slash.utils.manage_commands import create_option
+from discord_slash.utils.manage_commands import create_option, create_choice
 from dotenv import load_dotenv
 from dataclasses import dataclass
 
@@ -188,7 +188,7 @@ def created_joined_str(member: discord.Member) -> str:
     return f'{member.created_at.date()}_{member.joined_at.date()}'
 
 
-def find_duplicate_dates(members):
+def find_duplicate_dates(members: List[discord.Member]) -> Dict[str, int]:
     date_counts = defaultdict(int)
     for member in members:
         if str(member.created_at.date()) == str(member.joined_at.date()):
@@ -196,10 +196,23 @@ def find_duplicate_dates(members):
         date = created_joined_str(member)
         date_counts[date] += 1
 
-    duplicates = {date: count for date, count in date_counts.items() if count > 5}
-    print(duplicates)
+    return {date: count for date, count in date_counts.items() if count > 5}
 
-    return duplicates
+
+def find_duplicate_dates_users(members: List[discord.Member]) -> Dict[str, List[discord.Member]]:
+    date_members = defaultdict(list)
+    for member in members:
+        if str(member.created_at.date()) == str(member.joined_at.date()):
+            continue  # skip same day create and joins
+        date = created_joined_str(member)
+        date_members[date].append(member)
+
+    # Sort items by the length of the value lists in descending order and filter out items with less than 5 members
+    sorted_items = sorted(((date, members) for date, members in date_members.items() if len(members) > 5),
+                          key=lambda x: len(x[1]), reverse=True)
+
+    # Create an OrderedDict to maintain the order
+    return OrderedDict(sorted_items)
 
 
 @slash.slash(name="sus", description="List sus users", guild_ids=guild_ids)
@@ -301,14 +314,41 @@ async def airlock(ctx: SlashContext):
     name="airlock_bulk",
     description="Check and ban sus users in bulk",
     guild_ids=guild_ids,
+    options=[
+        create_option(
+            name="mode",
+            description="Choose the mode for banning users",
+            option_type=3,  # 3 means STRING type
+            required=True,
+            choices=[
+                create_choice(
+                    name="ANY",
+                    value="ANY"
+                ),
+                create_choice(
+                    name="JOIN_CREATED_DATES",
+                    value="JOIN_CREATED_DATES"
+                )
+            ]
+        )
+    ]
 )
-async def airlock_bulk(ctx: SlashContext):
-    sus_members = await find_sus(ctx.guild.members)
-    batch_size = 10
+async def airlock_bulk(ctx: SlashContext, mode: str):
+    sus_members: List[SusUser] = []
+    batch_size: int = 10
+    if mode == "ANY":
+        sus_members = await find_sus(ctx.guild.members)
+    elif mode == "JOIN_CREATED_DATES":
+        dates_users = find_duplicate_dates_users(ctx.guild.members)
+        for member in next(iter(dates_users.values())):
+            reason = f"({member.created_at.isoformat()},{member.joined_at.isoformat()})"
+            sus = create_sus_user(member, [reason])
+            sus_members.append(sus)
+        batch_size = len(sus_members)  # for this mode, we should handle all the sus members in one batch
 
-    # Create bulk list
     for i in range(0, len(sus_members), batch_size):
-        embed = discord.Embed(title="Sus Users", description=f"Batch {i // batch_size + 1}", color=0xFF5733)
+        embed = discord.Embed(title="Sus Users", description=f"Batch {i // batch_size + 1}, Size {batch_size}",
+                              color=0xFF5733)
         batch = sus_members[i:i + batch_size]
 
         batch_members = []
