@@ -1,9 +1,11 @@
 import asyncio
-from datetime import datetime
 import json
 import os
 import re
 from collections import defaultdict, OrderedDict
+from dataclasses import dataclass
+from datetime import datetime
+from datetime import timedelta
 from typing import List, Optional, Dict
 
 import discord
@@ -12,7 +14,6 @@ from discord_slash import SlashCommand, SlashContext
 from discord_slash.model import SlashMessage
 from discord_slash.utils.manage_commands import create_option, create_choice
 from dotenv import load_dotenv
-from dataclasses import dataclass
 
 load_dotenv()
 
@@ -73,6 +74,69 @@ def create_sus_user(member: discord.Member, reasons: list) -> SusUser:
 @bot.event
 async def on_ready():
     print(f'{bot.user.name} has connected to Discord!')
+    batch = find_batched_members(bot.guilds[0].members)
+    with open('batches.json', 'w') as f:
+        s = json.dumps(batch, indent=True)
+        f.write(s)
+    print(f"{batch}")
+
+
+def find_batched_members(members: List[discord.Member]) -> list[dict[str, str]]:
+    """ Returns a list of users whose creation and join dates all fall within 24 hours of each other, but no single
+    member has a creation and join date within 24 hours of itself. This way we avoid counting users who signed
+    up for discord and immediately joined the server. """
+    # Step 1: Sort members by `created_at`.
+    members.sort(key=lambda member: member.created_at)
+
+    batched_members = []
+
+    # Step 2: Group members by `created_at`.
+    i = 0
+    while i < len(members):
+        # Skip users where the join and creation date are within 24 hours
+        if abs((members[i].joined_at - members[i].created_at).total_seconds()) < 24 * 60 * 60:
+            i += 1
+            continue
+
+        creation_batch = [members[i]]
+
+        j = i + 1
+        while j < len(members) and members[j].created_at - members[i].created_at < timedelta(hours=24):
+            # Skip users where the join and creation date are within 24 hours
+            if abs((members[j].joined_at - members[j].created_at).total_seconds()) < 24 * 60 * 60:
+                j += 1
+                continue
+
+            creation_batch.append(members[j])
+            j += 1
+
+        # Step 3: For each creation group, sort by `joined_at` and group by `joined_at`.
+        creation_batch.sort(key=lambda member: member.joined_at)
+
+        k = 0
+        while k < len(creation_batch):
+            join_batch = [creation_batch[k]]
+
+            l = k + 1
+            while l < len(creation_batch) and creation_batch[l].joined_at - creation_batch[k].joined_at < timedelta(
+                    hours=24):
+                join_batch.append(creation_batch[l])
+                l += 1
+
+            # If the batch has more than five members, add it to batched_members.
+            if len(join_batch) > 5:
+                batch = {member.id: f"({member.created_at.isoformat()},{member.joined_at.isoformat()})"
+                         for member in join_batch}
+                batched_members.append(batch)
+
+            k = l
+
+        i = j
+
+    # Sort the final output by the length of each batch, in descending order
+    batched_members.sort(key=len, reverse=True)
+
+    return batched_members
 
 
 @bot.event
@@ -295,6 +359,7 @@ async def ban_kick_abort_react_to_message(ctx: SlashContext, slash_msg: SlashMes
                 and _reaction.message.id == slash_msg.id
                 and str(_reaction.emoji) in (ban_emoji, kick_emoji, no_action_emoji)
         )
+
     try:
         reaction, _ = await bot.wait_for("reaction_add", check=check, timeout=300)
     except asyncio.TimeoutError:
