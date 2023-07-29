@@ -1,0 +1,15 @@
+# fly.toml app configuration file generated for sts-amongus-bot on 2023-07-28T20:27:30-07:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = "sts-amongus-bot"
+primary_region = "sea"
+kill_signal = "SIGINT"
+kill_timeout = "5s"
+
+[env]
+  DISCORD_BOT_TOKEN = ""
+  DISCORD_MOD_ROLE = ""
+  DISCORD_NOTIFY_CHANNEL = ""
+
