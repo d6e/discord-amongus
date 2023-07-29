@@ -302,15 +302,17 @@ async def airlock(ctx: SlashContext):
     description="Check and ban sus users in bulk",
     guild_ids=guild_ids,
 )
-async def airlock_bulk(ctx):
+async def airlock_bulk(ctx: SlashContext):
     sus_members = await find_sus(ctx.guild.members)
+    batch_size = 10
 
     # Create bulk list
-    for i in range(0, len(sus_members), 10):
-        embed = discord.Embed(title="Sus Users", description=f"Batch {i // 10 + 1}", color=0xFF5733)
+    for i in range(0, len(sus_members), batch_size):
+        embed = discord.Embed(title="Sus Users", description=f"Batch {i // batch_size + 1}", color=0xFF5733)
+        batch = sus_members[i:i + batch_size]
 
         batch_members = []
-        for index, sus in enumerate(sus_members[i:i + 10], start=i + 1):
+        for index, sus in enumerate(batch, start=i + 1):
             batch_members.append(sus)
             embed.add_field(name=f"{index}. {sus.username}", value=f"[{','.join(sus.reasons)}]", inline=False)
         mentions = [m.mention for m in batch_members]
@@ -333,11 +335,18 @@ async def airlock_bulk(ctx):
             return
 
         if str(reaction.emoji) == ban_emoji:
-            for sus in sus_members[i:i + 10]:
+            for sus in batch:
                 try:
                     await ctx.guild.ban(sus, reason="Sus user banned by Airlock command.")
                 except discord.errors.Forbidden:
                     await ctx.send(f"Failed to ban {sus.username}. Check the bot's permissions.")
+        elif str(reaction.emoji) == kick_emoji:
+            for sus in batch:
+                try:
+                    await ctx.guild.kick(sus)
+                    await ctx.send(f"{sus.username} has been kicked.")
+                except discord.errors.Forbidden:
+                    await ctx.send("Failed to kick the user. Check the bot's permissions.")
         else:
             await ctx.send("No action taken.")
 
