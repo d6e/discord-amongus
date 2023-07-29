@@ -167,7 +167,7 @@ def find_batched_members(members: List[discord.Member], hour_interval=24) -> lis
                 l += 1
 
             # If the batch has more than five members, add it to batched_members.
-            if len(join_batch) > 5:
+            if len(join_batch) > 3:
                 batch = {member.id: f"({member.created_at.isoformat()},{member.joined_at.isoformat()})"
                          for member in join_batch}
                 batched_members.append(batch)
