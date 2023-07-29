@@ -9,6 +9,7 @@ from typing import List, Optional, Dict
 import discord
 from discord.ext import commands
 from discord_slash import SlashCommand, SlashContext
+from discord_slash.model import SlashMessage
 from discord_slash.utils.manage_commands import create_option, create_choice
 from dotenv import load_dotenv
 from dataclasses import dataclass
@@ -280,34 +281,40 @@ async def airlock(ctx: SlashContext):
         embed.set_footer(text=f"User {index} of {total_sus_members}")
 
         message_data = await ctx.send(sus.mention, embed=embed)
-        await message_data.add_reaction(ban_emoji)
-        await message_data.add_reaction(kick_emoji)
-        await message_data.add_reaction(no_action_emoji)
+        await ban_kick_abort_react_to_message(ctx, message_data, [sus])
 
-        def check(_reaction, _user):
-            return _user == ctx.author and _reaction.message.id == message_data.id \
-                and str(_reaction.emoji) in [ban_emoji, kick_emoji, no_action_emoji]
 
-        try:
-            reaction, user = await bot.wait_for("reaction_add", timeout=60.0, check=check)
-        except asyncio.TimeoutError:
-            await ctx.send(f"Timeout. No action taken for {sus.username}.")
-            return
-        else:
-            if str(reaction.emoji) == ban_emoji:
-                try:
-                    await ctx.guild.ban(sus)
-                    await ctx.send(f"{sus.username} has been banned.")
-                except discord.errors.Forbidden:
-                    await ctx.send("Failed to ban the user. Check the bot's permissions.")
-            elif str(reaction.emoji) == kick_emoji:
-                try:
-                    await ctx.guild.kick(sus)
-                    await ctx.send(f"{sus.username} has been kicked.")
-                except discord.errors.Forbidden:
-                    await ctx.send("Failed to kick the user. Check the bot's permissions.")
-            elif str(reaction.emoji) == no_action_emoji:
-                await ctx.send(f"No action taken for {sus.username}.")
+async def ban_kick_abort_react_to_message(ctx: SlashContext, slash_msg: SlashMessage, sus_members: List[SusUser]):
+    await slash_msg.add_reaction(ban_emoji)
+    await slash_msg.add_reaction(kick_emoji)
+    await slash_msg.add_reaction(no_action_emoji)
+
+    def check(_reaction, _user):
+        return (
+                _user == ctx.author
+                and _reaction.message.id == slash_msg.id
+                and str(_reaction.emoji) in (ban_emoji, kick_emoji, no_action_emoji)
+        )
+    try:
+        reaction, _ = await bot.wait_for("reaction_add", check=check, timeout=300)
+    except asyncio.TimeoutError:
+        await ctx.send("Timeout. No action taken.")
+        return
+    if str(reaction.emoji) == ban_emoji:
+        for sus in sus_members:
+            try:
+                await ctx.guild.ban(sus, reason="Sus user banned by Airlock command.")
+            except discord.errors.Forbidden:
+                await ctx.send(f"Failed to ban {sus.username}. Check the bot's permissions.")
+    elif str(reaction.emoji) == kick_emoji:
+        for sus in sus_members:
+            try:
+                await ctx.guild.kick(sus)
+                await ctx.send(f"{sus.username} has been kicked.")
+            except discord.errors.Forbidden:
+                await ctx.send("Failed to kick the user. Check the bot's permissions.")
+    else:
+        await ctx.send("No action taken.")
 
 
 @slash.slash(
@@ -351,44 +358,11 @@ async def airlock_bulk(ctx: SlashContext, mode: str):
                               color=0xFF5733)
         batch = sus_members[i:i + batch_size]
 
-        batch_members = []
         for index, sus in enumerate(batch, start=i + 1):
-            batch_members.append(sus)
             embed.add_field(name=f"{index}. {sus.username}", value=f"[{','.join(sus.reasons)}]", inline=False)
-        mentions = [m.mention for m in batch_members]
+        mentions = [m.mention for m in batch]
         message = await ctx.send(str(mentions), embed=embed)
-
-        for emoji in (ban_emoji, no_action_emoji):
-            await message.add_reaction(emoji)
-
-        def check(_reaction, user):
-            return (
-                    user == ctx.author
-                    and _reaction.message.id == message.id
-                    and str(_reaction.emoji) in (ban_emoji, no_action_emoji)
-            )
-
-        try:
-            reaction, _ = await bot.wait_for("reaction_add", check=check, timeout=60)
-        except asyncio.TimeoutError:
-            await ctx.send("Timeout. No action taken.")
-            return
-
-        if str(reaction.emoji) == ban_emoji:
-            for sus in batch:
-                try:
-                    await ctx.guild.ban(sus, reason="Sus user banned by Airlock command.")
-                except discord.errors.Forbidden:
-                    await ctx.send(f"Failed to ban {sus.username}. Check the bot's permissions.")
-        elif str(reaction.emoji) == kick_emoji:
-            for sus in batch:
-                try:
-                    await ctx.guild.kick(sus)
-                    await ctx.send(f"{sus.username} has been kicked.")
-                except discord.errors.Forbidden:
-                    await ctx.send("Failed to kick the user. Check the bot's permissions.")
-        else:
-            await ctx.send("No action taken.")
+        await ban_kick_abort_react_to_message(ctx, message, batch)
 
 
 if __name__ == "__main__":
