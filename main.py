@@ -45,7 +45,7 @@ banned_avatars = [
 
 @dataclass
 class SusUser:
-    user_id: int
+    id: int
     username: str
     display_name: str
     date_created: datetime
@@ -58,7 +58,7 @@ class SusUser:
 
 def create_sus_user(member: discord.Member, reasons: list) -> SusUser:
     return SusUser(
-        user_id=member.id,
+        id=member.id,
         username=f'{member.name}#{member.discriminator}',
         display_name=member.display_name,
         date_created=member.created_at,
@@ -259,7 +259,7 @@ def make_sus_user_embed(sus: SusUser, description=""):
                           description=description,
                           color=discord.Color.blue())
     embed.set_thumbnail(url=sus.avatar_url)
-    embed.add_field(name="id", value=str(sus.user_id), inline=False)
+    embed.add_field(name="id", value=str(sus.id), inline=False)
     embed.add_field(name="display_name", value=sus.display_name, inline=False)
     embed.add_field(name="Joined Server", value=sus.date_joined.strftime("%Y-%m-%d"), inline=False)
     embed.add_field(name="Account Creation", value=sus.date_created.strftime("%Y-%m-%d"), inline=False)
@@ -351,6 +351,7 @@ async def airlock_bulk(ctx: SlashContext, mode: str):
             reason = f"({member.created_at.isoformat()},{member.joined_at.isoformat()})"
             sus = create_sus_user(member, [reason])
             sus_members.append(sus)
+        sus_members.sort(key=lambda m: m.reasons[0])  # sort by the first reason string
         batch_size = len(sus_members)  # for this mode, we should handle all the sus members in one batch
 
     for i in range(0, len(sus_members), batch_size):
