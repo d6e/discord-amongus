@@ -74,16 +74,59 @@ def create_sus_user(member: discord.Member, reasons: list) -> SusUser:
 @bot.event
 async def on_ready():
     print(f'{bot.user.name} has connected to Discord!')
-    batch = find_batched_members(bot.guilds[0].members)
-    with open('batches.json', 'w') as f:
-        s = json.dumps(batch, indent=True)
-        f.write(s)
-    print(f"{batch}")
+    batch = find_batched_members(bot.guilds[0].members, hour_interval=48)
+    # with open('batches.json', 'w') as f:
+    #     s = json.dumps(batch, indent=True)
+    #     f.write(s)
+    all_ids = [key for d in batch for key in d.keys()]
+    plot_user_create_join(bot.guilds[0], all_ids)
+    exit()
 
 
-def find_batched_members(members: List[discord.Member]) -> list[dict[str, str]]:
-    """ Returns a list of users whose creation and join dates all fall within 24 hours of each other, but no single
-    member has a creation and join date within 24 hours of itself. This way we avoid counting users who signed
+def plot_user_create_join(guild, sus_ids):
+    import pandas as pd
+    import matplotlib.pyplot as plt
+
+    join_dates = []
+    creation_dates = []
+    members = []
+    sus_members = []
+
+    for member in guild.members:
+        join_dates.append(member.joined_at.timestamp())
+        creation_dates.append(member.created_at.timestamp())
+        if member.id in sus_ids:
+            sus_members.append(str(member))
+        members.append(str(member))
+
+    data = {
+        'Member': members,
+        'Join_Date': join_dates,
+        'Creation_Date': creation_dates
+    }
+
+    df = pd.DataFrame(data)
+    df['Set'] = 'Normal'
+    df.loc[df['Member'].isin(sus_members), 'Set'] = 'Sus'
+
+    min_join_date = datetime.fromtimestamp(min(join_dates)).strftime('%Y-%m-%d')
+    max_join_date = datetime.fromtimestamp(max(join_dates)).strftime('%Y-%m-%d')
+    min_creation_date = datetime.fromtimestamp(min(creation_dates)).strftime('%Y-%m-%d')
+    max_creation_date = datetime.fromtimestamp(max(creation_dates)).strftime('%Y-%m-%d')
+
+    # plt.figure(figsize=(20, 12))  # Adjusted figure size
+    plt.figure(figsize=(20, 12), dpi=600)  # Adjusted DPI for higher resolution
+    plt.scatter(df['Join_Date'], df['Creation_Date'], s=1)
+    plt.xlabel(f'Join Date ({min_join_date} - {max_join_date})')
+    plt.ylabel(f'Creation Date ({min_creation_date} - {max_creation_date})')
+    plt.title('Join Dates vs Creation Dates of Members')
+    plt.savefig('chart.png')
+    df.to_csv('data.csv', index=False)
+
+
+def find_batched_members(members: List[discord.Member], hour_interval=24) -> list[dict[str, str]]:
+    """ Returns a list of users whose creation and join dates all fall within hour_interval of each other, but no single
+    member has a creation and join date within hour_interval of itself. This way we avoid counting users who signed
     up for discord and immediately joined the server. """
     # Step 1: Sort members by `created_at`.
     members.sort(key=lambda member: member.created_at)
@@ -94,16 +137,16 @@ def find_batched_members(members: List[discord.Member]) -> list[dict[str, str]]:
     i = 0
     while i < len(members):
         # Skip users where the join and creation date are within 24 hours
-        if abs((members[i].joined_at - members[i].created_at).total_seconds()) < 24 * 60 * 60:
+        if abs((members[i].joined_at - members[i].created_at).total_seconds()) < hour_interval * 60 * 60:
             i += 1
             continue
 
         creation_batch = [members[i]]
 
         j = i + 1
-        while j < len(members) and members[j].created_at - members[i].created_at < timedelta(hours=24):
+        while j < len(members) and members[j].created_at - members[i].created_at < timedelta(hours=hour_interval):
             # Skip users where the join and creation date are within 24 hours
-            if abs((members[j].joined_at - members[j].created_at).total_seconds()) < 24 * 60 * 60:
+            if abs((members[j].joined_at - members[j].created_at).total_seconds()) < hour_interval * 60 * 60:
                 j += 1
                 continue
 
@@ -119,7 +162,7 @@ def find_batched_members(members: List[discord.Member]) -> list[dict[str, str]]:
 
             l = k + 1
             while l < len(creation_batch) and creation_batch[l].joined_at - creation_batch[k].joined_at < timedelta(
-                    hours=24):
+                    hours=hour_interval):
                 join_batch.append(creation_batch[l])
                 l += 1
 
