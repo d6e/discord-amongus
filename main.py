@@ -71,6 +71,11 @@ def create_sus_user(member: discord.Member, reasons: list) -> SusUser:
     )
 
 
+def is_moderator(ctx: SlashContext):
+    member = ctx.guild.get_member(ctx.author_id)
+    return member.guild_permissions.manage_messages
+
+
 @bot.event
 async def on_ready():
     print(f'{bot.user.name} has connected to Discord!')
@@ -226,6 +231,9 @@ def find_sus_group(user: discord.Member) -> List[SusUser]:
                  )
              ], )
 async def sus_group(ctx: SlashContext, user: discord.Member):
+    if not is_moderator(ctx):
+        await ctx.send(content="You're not a moderator!", hidden=True)
+        return
     duplicate_dates = find_duplicate_dates(user.guild.members)
     if not has_duplicate_date(user, duplicate_dates):
         await ctx.channel.send(f"No users were found with similar join-create dates to user={user.mention}.")
@@ -325,6 +333,9 @@ def find_duplicate_dates_users(members: List[discord.Member]) -> Dict[str, List[
 
 @slash.slash(name="sus", description="List sus users", guild_ids=guild_ids)
 async def sus_users(ctx: SlashContext):
+    if not is_moderator(ctx):
+        await ctx.send(content="You're not a moderator!", hidden=True)
+        return
     members_data = []
     duplicate_dates = find_duplicate_dates(ctx.guild.members)
     for member in ctx.guild.members:
@@ -376,6 +387,9 @@ def make_sus_user_embed(sus: SusUser, description=""):
 
 @slash.slash(name="airlock", description="Ban or kick sus users with confirmation", guild_ids=guild_ids)
 async def airlock(ctx: SlashContext):
+    if not is_moderator(ctx):
+        await ctx.send(content="You're not a moderator!", hidden=True)
+        return
     sus_members: List[SusUser] = await find_sus(ctx.guild.members)
 
     if not sus_members:
@@ -449,6 +463,9 @@ async def ban_kick_abort_react_to_message(ctx: SlashContext, slash_msg: SlashMes
     ]
 )
 async def airlock_bulk(ctx: SlashContext, mode: str):
+    if not is_moderator(ctx):
+        await ctx.send(content="You're not a moderator!", hidden=True)
+        return
     sus_members: List[SusUser] = []
     batch_size: int = 10
     if mode == "ANY":
