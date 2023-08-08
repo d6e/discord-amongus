@@ -119,7 +119,6 @@ async def on_member_join(member):
         msg = f"{moderators_role.mention} A suspicious user {member.mention} has joined the server. Please investigate."
         print(msg)
         # await member.guild.system_channel.send(msg)
-        member.guild.
 
 
 async def get_training_data():

@@ -284,8 +284,8 @@ async def sus_check(member: discord.Member, duplicate_dates) -> Optional[SusUser
     if await is_avatar_banned(member):
         reasons.append("Has a known banned avatar")
     # TODO: we should also have a case where we check if duplicate (non-default) avatars
-    if is_new_account(member, days=7) and has_no_avatar(member):
-        reasons.append("Account is less than 7 days old and has no avatar")
+    # if is_new_account(member, days=7) and has_no_avatar(member):
+    #     reasons.append("Account is less than 7 days old and has no avatar")
     if len(reasons) > 0:
         return create_sus_user(member, reasons)
     else:
